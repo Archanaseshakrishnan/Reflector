@@ -1,0 +1,66 @@
+#!/usr/bin/env python2
+from optparse import OptionParser
+#./reflector --interface eth0 --victim-ip 192.168.1.10  --victim-ethernet 31:16:A9:63:FF:83 --reflector-ip 192.168.1.20 --reflector-ethernet 38:45:E3:89:B5:56
+from scapy.all import *
+
+if __name__ == '__main__':
+    parser = OptionParser()
+    parser.add_option("--interface", dest = "interface")
+    parser.add_option("--victim-ip", dest = "victim_ip")
+    parser.add_option("--victim-ethernet", dest="victim_ethernet")
+    parser.add_option("--reflector-ip", dest="reflector_ip")
+    parser.add_option("--reflector-ethernet", dest="reflector_ethernet")
+    (options, args) = parser.parse_args()
+    interface = options.interface
+    victim_ip=options.victim_ip
+    victim_ethernet=options.victim_ethernet
+    reflector_ip=options.reflector_ip
+    reflector_ethernet=options.reflector_ethernet
+    
+    print(interface)
+    print(victim_ip)	
+    print(victim_ethernet)
+    print(reflector_ip)
+    print(reflector_ethernet)
+
+def pkthdr(a):	
+	print (a.summary())
+	#print(a[0].getlayer("ARP").pdst)
+	#print(a[1].getlayer("ARP").pdst)
+	if(a[0].getlayer("ARP")):
+		if((a[0].getlayer("ARP").op==1 ) & (a[0].getlayer("ARP").pdst == victim_ip)):
+			print ("ARP Reply for V");
+			pkt = Ether(dst=a[0].getlayer("Ethernet").src,src=reflector_ethernet)/ARP(op="is-at",psrc=victim_ip,pdst=a[0].getlayer("ARP").psrc,hwdst=a[0].getlayer("Ethernet").src,hwsrc=reflector_ethernet)
+			print(pkt.summary())
+			sendp(pkt,iface=interface)
+			
+		elif((a[0].getlayer("ARP").op==1 ) & (a[0].getlayer("ARP").pdst == reflector_ip)):
+			print ("ARP Reply for R");
+			pkt = Ether(dst=a[0].getlayer("Ethernet").src,src=reflector_ethernet)/ARP(op="is-at",psrc=reflector_ip,pdst=a[0].getlayer("ARP").psrc,hwdst=a[0].getlayer("Ethernet").src,hwsrc=reflector_ethernet)
+			print(pkt.summary())
+			sendp(pkt,iface=interface)
+	elif(a[0].getlayer("IP")):
+		print(a[0].getlayer("Ethernet").dst)
+		if((a[0].getlayer("IP").dst==victim_ip) & (a[0].getlayer("Ethernet").dst == reflector_ethernet)):
+			print("Victim respond as Reflect");
+			c=a[0];
+			c.getlayer("Ethernet").dst=a[0].getlayer("Ethernet").src
+			c.getlayer("Ethernet").src=reflector_ethernet
+			c.getlayer("IP").dst= a[0].getlayer("IP").src
+			c.getlayer("IP").src=reflector_ip
+			c.getlayer("IP").chksum=None
+			#print(c.summary())
+			sendp(c,iface=interface)
+		elif((a[0].getlayer("IP").dst==reflector_ip) & (a[0].getlayer("Ethernet").dst == reflector_ethernet)):
+			print("Reflect respond as Victim");
+			c=a[0];
+			c.getlayer("Ethernet").dst=a[0].getlayer("Ethernet").src
+			c.getlayer("Ethernet").src=reflector_ethernet
+			c.getlayer("IP").dst= a[0].getlayer("IP").src
+			c.getlayer("IP").src=victim_ip
+                        c.getlayer("IP").chksum=None
+			#print(c.summary())
+			sendp(c,iface=interface)
+					
+sniff(prn=pkthdr,iface=interface)
+
